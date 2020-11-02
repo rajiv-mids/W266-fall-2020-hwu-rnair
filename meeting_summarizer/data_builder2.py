@@ -22,9 +22,13 @@ class BertDataProcessor:
         train, validation and test split by meeting
         '''
         meetings = list(self.meetings)
-        self.train_list = meetings[:50]
-        self.validation_list = meetings[50:58]
-        self.test_list = meetings[58:]
+#        self.train_list = meetings[:50]
+#        self.validation_list = meetings[50:58]
+#        self.test_list = meetings[58:]
+
+        self.train_list = meetings[:10]
+        self.validation_list = meetings[10:15]
+        self.test_list = meetings[15:20]
 
 
     def format_to_bert(self, args=None):
@@ -58,9 +62,13 @@ class BertDataProcessor:
                                 else:
                                     input_ids = tokenizer.convert_tokens_to_ids(cur_chunk)
                                     attn_masks = [1]*len(input_ids)
+                                    cls_ids = [1 if t == cls_vid else 0 for _, t in enumerate(input_ids) ]
+                                    mask_cls = [1 for _ in range(len(cls_ids))]
+
                                     [attn_masks.append(0) for _ in range(len(attn_masks), 512)]
                                     [input_ids.append(0) for _ in range(len(input_ids), 512)]
-                                    cls_ids = [1 if t == cls_vid else 0 for _, t in enumerate(input_ids) ]
+                                    [cls_ids.append(0) for _ in range(len(cls_ids), 512)]
+                                    [mask_cls.append(0) for _ in range(len(mask_cls), 512)]
 
                                     _segs = [-1] + [i for i, t in enumerate(input_ids) if t == sep_vid]
                                     segs = [_segs[i] - _segs[i - 1] for i in range(1, len(_segs))]
@@ -73,18 +81,17 @@ class BertDataProcessor:
                                     [cur_labels.append(0) for _ in range(len(cur_labels), 512)]
                                     [segments_ids.append(0) for _ in range(len(segments_ids), 512)]
                                     b_data_dict = {"src": input_ids, "labels": cur_labels, "segs": segments_ids, 
-                                                'clss': cls_ids, "attn": attn_masks}
+                                                'clss': cls_ids, "attn": attn_masks, "mask_cls":mask_cls}
                                     output.append(b_data_dict)
                                     cur_chunk = s_chunk
                                     cur_labels = [int(label)]
             out =  {"src": [], "labels": [], "segs": [], 
-                                                'clss': [], "attn": []}
+                                                'clss': [], "attn": [], "mask_cls":[]}
             for sample in output:
                 for key, val in sample.items():
                     out[key].append(val)
             for k, v in out.items():
-                out[k] = torch.FloatTensor(v)
-#            combined = [out["src"], out["labels"], out["segs"], out["clss"], out["attn"]]
+                out[k] = torch.LongTensor(v)
             for k, v in out.items():
                 torch.save(v, self.out_dir+"/"+k+"_"+batch+".pt")
             
