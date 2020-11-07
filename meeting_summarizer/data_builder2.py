@@ -7,15 +7,16 @@ tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
 
 class BertDataProcessor:
     def __init__(self, data_dir, out_dir):
-        self.data_dir = data_dir
-        self.out_dir = out_dir
+        self.data_dir = BASE_DIR+data_dir
+        self.out_dir = BASE_DIR+out_dir
         self.inp_df = None
         self.meetings = set()
 
         for inp_file in sorted(glob.glob(self.data_dir+"/*txt")):
             f_name = os.path.basename(inp_file)
             self.meetings.add(f_name.split(".")[0])
-
+        if not os.path.exists(self.out_dir):
+            os.makedirs(self.out_dir)
 
     def split(self):
         '''
@@ -29,6 +30,7 @@ class BertDataProcessor:
         self.train_list = meetings[:10]
         self.validation_list = meetings[10:15]
         self.test_list = meetings[15:20]
+
 
 
     def format_to_bert(self, args=None):
@@ -62,7 +64,7 @@ class BertDataProcessor:
                                 else:
                                     input_ids = tokenizer.convert_tokens_to_ids(cur_chunk)
                                     attn_masks = [1]*len(input_ids)
-                                    cls_ids = [1 if t == cls_vid else 0 for _, t in enumerate(input_ids) ]
+                                    cls_ids = [i for i, t in enumerate(input_ids) if t == cls_vid ]
                                     mask_cls = [1 for _ in range(len(cls_ids))]
 
                                     [attn_masks.append(0) for _ in range(len(attn_masks), 512)]
@@ -94,8 +96,8 @@ class BertDataProcessor:
                 out[k] = torch.LongTensor(v)
             for k, v in out.items():
                 torch.save(v, self.out_dir+"/"+k+"_"+batch+".pt")
-            
-dp = BertDataProcessor("/home/rajivn/W266/W266-fall-2020-hwu-rnair/data/ICSI_plus_NXT/processing", 
-                    "/home/rajivn/W266/W266-fall-2020-hwu-rnair/data/ICSI_plus_NXT/tensors")
+BASE_DIR = "/home/rajivn/W266/W266-fall-2020-hwu-rnair/"
+dp = BertDataProcessor("data/ICSI_plus_NXT/processing", 
+                    "data/ICSI_plus_NXT/tensors")
 dp.split()
 dp.format_to_bert()

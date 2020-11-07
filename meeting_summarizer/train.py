@@ -53,3 +53,5 @@ class Summarizer(nn.Module):
         sent_scores = self.encoder(sents_vec, mask_cls).squeeze(-1)
         return sent_scores, mask_cls
 
+
+
