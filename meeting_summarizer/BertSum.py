@@ -142,7 +142,7 @@ for p in params[-4:]:
 
 
 for param in model.bert.parameters():
-    param.requires_grad=False
+    param.requires_grad=True
 
 # Note: AdamW is a class from the huggingface library (as opposed to pytorch) 
 # I believe the 'W' stands for 'Weight Decay fix"
@@ -172,21 +172,31 @@ scheduler = get_linear_schedule_with_warmup(optimizer,
 
 def gen_outputs(batch_id, probs, labels, cls_ids, mask_cls,src):
     # extract sentences and labels
-    probs = np.where(probs>0.5, 1, 0)
-    sep_vocab = tokenizer.vocab["[SEP]"]
+#    probs = np.where(probs>=0.12, 1, 0)
+    probs_bin = np.where(probs>=0.12, 1, 0)
     reference = []
     result = []
     for p, passage in enumerate(src):
-        lines = passage.split(sep_vocab)
+#        print(probs[p,])
+        lines = tokenizer.decode(passage)
+        lines = lines.split("[SEP]")
         for i, sent in enumerate(lines):
-            sent = tokenizer.decode(sent).replace("[SEP]", "").replace("[CLS]", "").replace("[PAD]", "")
-            with open(RESULT_DIR+"REF"+batch_id, "w+") as ref, open(RESULT_DIR+"LAB"+batch_id, "w+") as lab:
+            sent = sent.replace("[SEP]", "").replace("[CLS]", "").replace("[PAD]", "")
+            with open(RESULT_DIR+"PRED"+batch_id+".txt", "a") as ref, open(RESULT_DIR+"LAB"+batch_id+".txt", "a") as lab, open(RESULT_DIR+"GOOD"+batch_id+".txt", "a") as good, open(RESULT_DIR+"BAD"+batch_id+".txt", "a") as bad:
                 if labels[p, i] == 1:
+#                    print("LABEL", "p=", p, "i=", i, probs[p, i], labels[p, i], sent)
                     reference.append(sent)
-                    lab.write(sent)
-                if probs[p, i] == 1:
+                    lab.write(sent + "\n")
+                if probs_bin[p, i] == 1:
+#                    print("PRED", "p=", p, "i=", i, probs[p, i], labels[p, i], sent)
                     result.append(sent)
-                    ref.write(sent)
+                    ref.write(sent + "\n")
+                if labels[p, i] == 1 and probs_bin[p, i] == 1:
+                    good.write(str(probs[p, :np.argmin(mask_cls[p,])]) +"|"+ sent + "\n")
+                if labels[p, i] != probs_bin[p, i]:
+                    bad.write("perd = "+str(probs[p, :np.argmin(mask_cls[p,])]) +"|"+ "label = "+str(labels[p, i]) +"|"+sent + "\n")
+    return reference, result # just return for debugging
+
 
 
 
@@ -266,7 +276,7 @@ for epoch_i in range(0, epochs):
         labels = labels.to('cpu').numpy()
 
 
-#        accuracy = gen_outputs("BATCH"+str(step), probs, labels, clss, mask_cls, src)
+        gen_outputs("TRAIN"+str(step), probs, labels, clss, mask_cls, src)
 
         # Accumulate the training loss over all of the batches so that we can
         # calculate the average loss at the end. `loss` is a Tensor containing a
@@ -300,6 +310,22 @@ for epoch_i in range(0, epochs):
     print("  Training epcoh took: {:}".format(training_time))
 
 
+    # Saving best-practices: if you use defaults names for the model, you can reload it using from_pretrained()
+
+    output_dir = BASE_DIR+'data/model_save/'
+
+    # Create output directory if needed
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    print("Saving model to %s" % output_dir)
+
+
+    # Save a trained model, configuration and tokenizer using `save_pretrained()`.
+    # They can then be reloaded using `from_pretrained()`
+    torch.save(model.state_dict(), output_dir+"bertsum_classifier")
+
+
 
   # ========================================
     #               Validation
@@ -323,7 +349,8 @@ for epoch_i in range(0, epochs):
 
     # Evaluate data for one epoch
     step = -1
-    for batch in validation_dataloader:
+#    for batch in validation_dataloader:
+    for batch in train_dataloader:
         step += 1
         # Unpack this training batch from our dataloader. 
         #
